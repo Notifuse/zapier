@@ -2,7 +2,7 @@
 
 The Zapier integration for [Notifuse](https://www.notifuse.com). Triggers are REST Hooks layered on Notifuse's outbound webhook subsystem; actions call its RPC API. Written in TypeScript against `zapier-platform-core` 19.
 
-The rules that keep this app reviewable — and the failure modes that are silent rather than loud — are in [CLAUDE.md](./CLAUDE.md). Read it before changing anything structural. The backend lives in a separate repository (`../notifuse`), and so does the user-facing documentation (`../docs`, published at [docs.notifuse.com/integrations/zapier](https://docs.notifuse.com/integrations/zapier)).
+The rules that keep this app reviewable — and the failure modes that are silent rather than loud — are in [CLAUDE.md](./CLAUDE.md). Read it before changing anything structural. The backend lives in a separate repository ([Notifuse/notifuse](https://github.com/Notifuse/notifuse)), and so does the user-facing documentation (published at [docs.notifuse.com/integrations/zapier](https://docs.notifuse.com/integrations/zapier)).
 
 ## What v1 ships
 
@@ -77,7 +77,7 @@ So each module in `src/shapes/` exports `fromWebhook(envelope)` and `fromApi(rec
 
 If you find yourself writing `bundle.cleanedRequest.data.something` outside `src/shapes/`, stop: that is the bug this layer exists to prevent.
 
-**The canonical contact field set is pinned in two repositories.** `canonicalContactFields` in `../notifuse/tests/integration/webhook_api_parity_test.go` holds the webhook payload and `contacts.list` to the same shape against a real database, and `test/shapes/contact.test.ts` holds this module to the same list. Change one and change the other.
+**The canonical contact field set is pinned in two repositories.** `canonicalContactFields` in the backend's `tests/integration/webhook_api_parity_test.go` holds the webhook payload and `contacts.list` to the same shape against a real database, and `test/shapes/contact.test.ts` holds this module to the same list. Change one and change the other.
 
 ### `id` is not a dedupe key
 
@@ -87,7 +87,7 @@ Hook triggers are **not deduplicated by Zapier** — every POST fires the Zap. `
 
 ## Samples
 
-`src/samples/payloads.json` is **generated** by `../notifuse/tests/integration/webhook_payload_samples_test.go`, which inserts a real record of each kind and captures the resulting `webhook_deliveries.payload`. Never edit it by hand, and never derive a sample from Notifuse's `webhookSubscriptions.test` endpoint, which invents fields (`subject`, `url`, `bounce_type`, `tags`) that appear in no real delivery.
+`src/samples/payloads.json` is **generated** by the backend's `tests/integration/webhook_payload_samples_test.go`, which inserts a real record of each kind and captures the resulting `webhook_deliveries.payload`. Never edit it by hand, and never derive a sample from Notifuse's `webhookSubscriptions.test` endpoint, which invents fields (`subject`, `url`, `bounce_type`, `tags`) that appear in no real delivery.
 
 Regenerate it in the backend repository with `UPDATE_WEBHOOK_SAMPLES=1 make test-integration`, then copy the file across. A trigger change that alters a payload shows up as a diff here.
 
@@ -126,7 +126,7 @@ General warnings do not block pushing or publishing; they are read by a human re
 
 ## Backend prerequisites
 
-This app cannot be pushed against an instance older than the backend work in `../notifuse/plans/zapier-integration-plan.md` §4. Specifically it depends on `webhookSubscriptions.create` accepting `source` and the `list_ids` / `segment_ids` filters, on `segments.contacts?expand=contact`, on `contacts.upsert` returning the stored contact and `lists.subscribe` returning one entry per list, and on permission denials answering 403. An older instance answers some of those with a 400 that names nothing useful.
+This app requires **Notifuse 39.0 or newer**. Specifically it depends on `webhookSubscriptions.create` accepting `source` and the `list_ids` / `segment_ids` filters, on `segments.contacts?expand=contact`, on `contacts.upsert` returning the stored contact and `lists.subscribe` returning one entry per list, and on permission denials answering 403. An older instance answers some of those with a 400 that names nothing useful.
 
 ## Release
 

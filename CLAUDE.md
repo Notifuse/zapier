@@ -2,7 +2,7 @@
 
 Zapier CLI integration for [Notifuse](https://www.notifuse.com), a self-hosted and cloud-hosted email marketing platform. Triggers are REST Hooks layered on Notifuse's existing outbound webhook subsystem; actions call its RPC API.
 
-**The backend lives in a separate repository** (`../notifuse`, Go + PostgreSQL). The design rationale, the backend prerequisites and the publishing plan are in `../notifuse/plans/zapier-integration-plan.md` — read it before changing anything structural here. Payload shapes are produced by PL/pgSQL triggers in that repo, so **no compiler in this repository can see them change**. That single fact drives most of the rules below.
+**The backend lives in a separate repository** ([Notifuse/notifuse](https://github.com/Notifuse/notifuse), Go + PostgreSQL), and this app requires Notifuse 39.0 or newer. The user-facing flow it must stay consistent with is documented at [docs.notifuse.com/integrations/zapier](https://docs.notifuse.com/integrations/zapier). Payload shapes are produced by PL/pgSQL triggers in that repo, so **no compiler in this repository can see them change**. That single fact drives most of the rules below.
 
 Status: scaffolded and green — six REST Hook triggers, two actions, three dropdowns. `npm test`, `npm run typecheck` and `npx zapier-platform validate` all pass; nothing has been pushed or promoted. *Architecture* below describes what exists.
 
