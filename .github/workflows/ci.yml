@@ -5,6 +5,9 @@
 # alters a payload shows up as a diff in that file. None of that is worth anything if the
 # copied file lands without the suite running over it — a renamed payload key blanks every
 # user mapping that reads it, silently, in a live Zap.
+#
+# Which is also why a workflow that fails for its own reasons is worse than no workflow: the
+# drift diff then arrives inside a run nobody reads. Every step below has been run end to end.
 name: CI
 
 on:
@@ -18,18 +21,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 22 is the Node major Zapier executes integrations on, and the floor zapier-platform-cli
+      # enforces at startup — not the ">=18.20" the CLI's own package.json still advertises.
+      # check-node-pin.cjs below fails this job if either of those moves away from this number.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - run: npm ci
+
+      - name: Node pin still matches the Zapier runtime
+        run: node .github/check-node-pin.cjs
 
       # tsconfig.json excludes test/, so this is the only pass that typechecks the tests.
       - run: npm run typecheck
 
       - run: npm test
 
-      # Builds first: validate reads dist/, so a validate on its own can pass against a
-      # stale build of the previous commit.
-      - run: npm run validate
+      # Structural validation only. `validate` otherwise POSTs the app definition to zapier.com
+      # for the publishing checks, and those are all cost and no signal here: the CLI prints them
+      # and still exits 0, so they cannot fail this job, while an unreachable API exits 2 and can.
+      # The remote checks stay a pre-`push` step for a human — README records the standing answers.
+      # The npm script builds first, because validate reads dist/.
+      - run: npm run validate -- --without-style

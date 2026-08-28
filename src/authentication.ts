@@ -20,6 +20,9 @@ interface ConnectionSummary {
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 
+/** The one endpoint the connection test calls; named so the failure can quote it. */
+const WORKSPACES_PATH = '/api/workspaces.list'
+
 /** The host of a base URL, for labelling; falls back to the raw string. */
 const hostOf = (baseUrl: string): string => {
   try {
@@ -38,17 +41,35 @@ const hostOf = (baseUrl: string): string => {
  * left the process.
  */
 export const testAuth = async (z: ZObject, bundle: Bundle): Promise<ConnectionSummary> => {
+  const baseUrl = normalizeBaseUrl(bundle.authData?.apiUrl)
+
   const response = await z.request<WorkspaceRecord[]>({
-    url: '/api/workspaces.list',
+    url: WORKSPACES_PATH,
     method: 'GET',
   })
 
-  const workspaces = Array.isArray(response.data) ? response.data : []
+  if (!Array.isArray(response.data)) {
+    // Not "no workspace": whatever answered is not this API, and a body that is
+    // not JSON leaves `data` undefined — the platform swallows the parse error and
+    // `afterResponse` lets anything under 400 through untouched. A wrong address
+    // is how that happens, and it does not announce itself: Notifuse answers an
+    // unknown path under `/console` with the SPA's index.html and a 200, so every
+    // endpoint returns HTML. Blaming the key here would send the user to create a
+    // second one, and a third, while the field that is actually wrong goes
+    // untouched.
+    throw new z.errors.Error(
+      `${baseUrl}${WORKSPACES_PATH} did not answer with a list of Notifuse workspaces, so that address is not a Notifuse API. Check the API URL on this connection: it takes the scheme and domain of your instance and nothing more, such as https://emails.yourcompany.com.`,
+      'NotNotifuseApi',
+      400,
+    )
+  }
+
+  const workspaces = response.data
   if (workspaces.length === 0) {
     // The key authenticates but reaches nothing. Every trigger and action needs a
     // workspace, so failing here beats an empty dropdown three screens later.
     throw new z.errors.Error(
-      'This API key does not belong to any workspace. Create the key inside the workspace you want Zapier to use, from Settings → Team.',
+      'This API key does not belong to any workspace. Create the key inside the workspace you want Zapier to use, from Settings → Integrations → Zapier.',
       'NoWorkspace',
       403,
     )
@@ -59,7 +80,7 @@ export const testAuth = async (z: ZObject, bundle: Bundle): Promise<ConnectionSu
   return {
     workspace_id: text(workspace?.id),
     workspace_name: text(workspace?.name),
-    host: hostOf(normalizeBaseUrl(bundle.authData?.apiUrl)),
+    host: hostOf(baseUrl),
   }
 }
 
@@ -113,7 +134,7 @@ const authentication = {
       type: 'password',
       required: true,
       helpText:
-        'Create one in Notifuse under Settings → Team → Create API Key. The token is shown once, when the key is created. [Which permissions to grant](https://docs.notifuse.com/integrations/zapier)',
+        'Create one in Notifuse under Settings → Integrations → Zapier, which scopes the key to what a Zap needs. The token is shown once, when the connection is made. [What the key can reach](https://docs.notifuse.com/integrations/zapier)',
     },
   ],
   test: testAuth,

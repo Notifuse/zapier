@@ -21,6 +21,12 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i
  * - A trailing `/api` goes too. The docs say scheme and domain only; the people
  *   who paste the API endpoint itself are the ones who need this, and without it
  *   every call would ask for `/api/api/…`.
+ * - So does a trailing `/console`, which is the likeliest paste of all: the field
+ *   asks for the address the console is opened at, and Notifuse serves the console
+ *   under `/console`, so that is what the address bar shows. Left on, every call
+ *   would ask for `/console/api/…` — and the console's SPA fallback answers an
+ *   unknown path with its index.html under a 200, so nothing would look broken
+ *   except that no endpoint ever returns data.
  */
 export const normalizeBaseUrl = (raw: string | undefined): string => {
   const trimmed = (raw ?? '').trim()
@@ -29,7 +35,7 @@ export const normalizeBaseUrl = (raw: string | undefined): string => {
   }
 
   const withScheme = SCHEME.test(trimmed) ? trimmed : `https://${trimmed}`
-  return withScheme.replace(/\/+$/, '').replace(/\/api$/i, '')
+  return withScheme.replace(/\/+$/, '').replace(/\/(api|console)$/i, '')
 }
 
 /**

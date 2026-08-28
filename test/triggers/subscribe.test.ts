@@ -189,6 +189,139 @@ describe('performSubscribe', () => {
     expect(result).toEqual({ id: 'sub_new' })
   })
 
+  // A second Zap on the same trigger produces a row that is identical to the first
+  // one in every field the reuse test reads — same workspace, same events, same
+  // filters, same `source` — and differs only by target URL. Adopting it would hand
+  // this Zap an id it does not own: it would receive nothing, because the deliveries
+  // go to the other Zap's URL, and switching it off would delete the row the first
+  // Zap depends on. Both of the next two tests exist for that one comparison.
+  it("does not adopt the subscription belonging to another Zap's URL", async () => {
+    let created = false
+    nock(CLOUD_API_URL)
+      .get('/api/webhookSubscriptions.list')
+      .query(true)
+      .reply(200, {
+        subscriptions: [
+          storedSubscription({
+            id: 'sub_other_zap',
+            url: 'https://hooks.zapier.com/hooks/standard/9999/zyxwvu/',
+          }),
+        ],
+      })
+      .post('/api/webhookSubscriptions.create', () => {
+        created = true
+        return true
+      })
+      .reply(201, { subscription: { id: 'sub_new' } })
+
+    const result = await appTester(
+      hookOperation('new_contact').performSubscribe,
+      subscribeBundle({ workspace_id: 'acme' }),
+    )
+
+    expect(result).toEqual({ id: 'sub_new' })
+    expect(created).toBe(true)
+  })
+
+  it("does not delete the subscription belonging to another Zap's URL", async () => {
+    // Same row as above but with filters this Zap would not reuse, which is the
+    // path that deletes before creating. Deleting here would silently kill a Zap
+    // that is running fine, and nothing in either Zap's history would say why.
+    let deleteAttempted = false
+    nock(CLOUD_API_URL)
+      .get('/api/webhookSubscriptions.list')
+      .query(true)
+      .reply(200, {
+        subscriptions: [
+          storedSubscription({
+            id: 'sub_other_zap',
+            url: 'https://hooks.zapier.com/hooks/standard/9999/zyxwvu/',
+            event_types: ['contact.deleted'],
+          }),
+        ],
+      })
+      .post('/api/webhookSubscriptions.delete', () => {
+        deleteAttempted = true
+        return true
+      })
+      .reply(200, { success: true })
+      .post('/api/webhookSubscriptions.create')
+      .reply(201, { subscription: { id: 'sub_new' } })
+
+    const result = await appTester(
+      hookOperation('new_contact').performSubscribe,
+      subscribeBundle({ workspace_id: 'acme' }),
+    )
+
+    expect(deleteAttempted).toBe(false)
+    expect(result).toEqual({ id: 'sub_new' })
+  })
+
+  it('replaces a subscription at this URL that listens for different events', async () => {
+    // A Zap whose trigger was swapped for another one keeps its target URL, so the
+    // leftover row is at the right address and watches the wrong thing. Reusing it
+    // would leave the Zap switched on and firing on events it no longer wants.
+    let deleted: Record<string, unknown> = {}
+    nock(CLOUD_API_URL)
+      .get('/api/webhookSubscriptions.list')
+      .query(true)
+      .reply(200, {
+        subscriptions: [
+          storedSubscription({ id: 'sub_wrong_events', event_types: ['contact.deleted'] }),
+        ],
+      })
+      .post('/api/webhookSubscriptions.delete', (posted: Record<string, unknown>) => {
+        deleted = posted
+        return true
+      })
+      .reply(200, { success: true })
+      .post('/api/webhookSubscriptions.create')
+      .reply(201, { subscription: { id: 'sub_new' } })
+
+    const result = await appTester(
+      hookOperation('new_contact').performSubscribe,
+      subscribeBundle({ workspace_id: 'acme' }),
+    )
+
+    expect(deleted).toEqual({ workspace_id: 'acme', id: 'sub_wrong_events' })
+    expect(result).toEqual({ id: 'sub_new' })
+  })
+
+  it('replaces a subscription at this URL that watches a different segment', async () => {
+    // The segment filter is the whole difference between two Zaps on this trigger,
+    // and it is the only field that differs here — an edit that moved the Zap from
+    // one segment to another leaves exactly this row behind.
+    let deleted: Record<string, unknown> = {}
+    nock(CLOUD_API_URL)
+      .get('/api/webhookSubscriptions.list')
+      .query(true)
+      .reply(200, {
+        subscriptions: [
+          storedSubscription({
+            id: 'sub_wrong_segment',
+            name: 'Zapier — Contact Joined Segment',
+            event_types: ['segment.joined'],
+            segment_ids: ['othersegment'],
+          }),
+        ],
+      })
+      .post('/api/webhookSubscriptions.delete', (posted: Record<string, unknown>) => {
+        deleted = posted
+        return true
+      })
+      .reply(200, { success: true })
+      .post('/api/webhookSubscriptions.create')
+      .reply(201, { subscription: { id: 'sub_new' } })
+
+    const result = await appTester(
+      hookOperation('segment_joined').performSubscribe,
+      subscribeBundle({ workspace_id: 'acme', segment_id: 'zapsampleseg' }),
+    )
+
+    expect(deleted).toEqual({ workspace_id: 'acme', id: 'sub_wrong_segment' })
+    expect(result).toEqual({ id: 'sub_new' })
+  })
+
   it('replaces a subscription whose filters no longer match the Zap', async () => {
     // Same target URL, different list: the row is a leftover from an edit whose
     // unsubscribe did not land. Leaving it would keep delivering the wrong list.

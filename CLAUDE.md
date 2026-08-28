@@ -79,7 +79,7 @@ Never let a raw envelope field reach a trigger's return value. If you find yours
 ## Zapier platform facts that are easy to get wrong
 
 - **The CLI binary is `zapier-platform`, not `zapier`.** The `zapier` binary was removed in platform v19.0.0 (2026-05-18). Anything you remember or find online using `zapier push` is stale.
-- Platform packages are on 19.x. The CLI needs Node ≥18.20; **integrations execute on Node 22.**
+- Platform packages are on 19.x. **Node 22 or newer, for the CLI as well as the runtime.** The CLI's own `engines.node` advertises `>=18.20` and contradicts itself: an oclif init hook checks `semver.satisfies(process.version, '>=22')` and calls `this.error()` below that, so on Node 20 every `zapier-platform` command exits 2 before doing anything. Read the floor from `zapier-platform-cli/src/constants.js` — `NODE_VERSION_CLI_REQUIRES` for what the CLI enforces, `NODE_VERSION` for the major Zapier executes integrations on — never from the advertised `engines`. `.github/check-node-pin.cjs` makes CI fail if the workflow pin or this repo's `engines.node` drifts from either.
 - TypeScript is first-class and **ESM-only**: `"type": "module"`, `module: NodeNext`, `exports: "./dist/index.js"`, and a `_zapier-build` npm script the CLI invokes. Use the `defineApp` / `defineTrigger` / `defineCreate` / `defineSearch` / `defineInputFields` helpers and `satisfies Authentication` for inference.
 - **There is no `rest-hooks` init template.** Scaffold from `custom-auth`, then set `type: 'hook'` on scaffolded triggers.
 - `zapier-platform test` wraps `npm test` and also runs `validate`. `zapier-platform invoke` runs an operation locally; `-a <auth-id>` relays through Zapier with production auth.
@@ -102,13 +102,17 @@ Never let a raw envelope field reach a trigger's return value. If you find yours
 
 ## Commands
 
+Node 22+ is required; anything older exits 2 on the first CLI command.
+
 ```
 npm test                        # vitest — must pass before every commit
-npx zapier-platform validate    # schema + style checks
+npm run validate                # build, then schema + publishing checks
 npx zapier-platform test        # npm test + validate
 npx zapier-platform invoke      # run an operation locally
 npx zapier-platform push        # upload a version
 ```
+
+`validate` has two halves and they behave differently. The schema half is local and is the one that fails: a structural error exits 1. The publishing-check half POSTs the definition to zapier.com, and in CLI 19.1.0 it only prints its findings — it never sets a non-zero exit — while an unreachable API *does* exit 2. So CI runs `npm run validate -- --without-style` and the publishing checks stay a pre-`push` step for a human; their standing answers are recorded in README.
 
 ## Release
 

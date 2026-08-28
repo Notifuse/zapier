@@ -51,6 +51,19 @@ describe('normalizeBaseUrl', () => {
     )
   })
 
+  it('strips the /console the address bar shows', () => {
+    // The field asks for the address the console is opened at, and Notifuse serves
+    // the console under /console — so the honest answer to the question is the one
+    // value that has to be trimmed. Left on, every call asks for /console/api/… ,
+    // which the SPA fallback answers with index.html and a 200 rather than a 404.
+    expect(normalizeBaseUrl('https://emails.example.com/console')).toBe('https://emails.example.com')
+    expect(normalizeBaseUrl('https://emails.example.com/console/')).toBe('https://emails.example.com')
+    expect(normalizeBaseUrl('emails.example.com/console')).toBe('https://emails.example.com')
+    expect(normalizeBaseUrl('https://emails.example.com/notifuse/console')).toBe(
+      'https://emails.example.com/notifuse',
+    )
+  })
+
   it('trims surrounding whitespace from a paste', () => {
     expect(normalizeBaseUrl('  https://emails.example.com  ')).toBe('https://emails.example.com')
   })
@@ -148,6 +161,24 @@ describe('afterResponse', () => {
 
     await expect(receive(denied)).rejects.toThrow(/contacts:read/)
     await expect(receive(denied)).rejects.toThrow(/permission/i)
+  })
+
+  it('sends a denied step to Team, where a key is widened rather than created', async () => {
+    // The other two user-facing screen names in this app point at Settings →
+    // Integrations, which is where a Zapier key is minted. This one must not
+    // follow them: the connection already works, so the fix is to widen the key
+    // that exists, and Team is the only screen that does that. Nor may it read as
+    // an instruction to make a new key — a second key would arrive scoped exactly
+    // like the first and be refused in the same place.
+    const denied = responseWith(403, { error: 'missing permission: contacts:read' })
+
+    const message = await Promise.resolve(receive(denied)).then(
+      () => '',
+      (error: Error) => error.message,
+    )
+
+    expect(message).toMatch(/Settings → Team/)
+    expect(message).not.toMatch(/creat/i)
   })
 
   it('surfaces the API error message on other failures', async () => {

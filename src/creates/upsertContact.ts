@@ -175,7 +175,13 @@ export const buildContactPayload = (inputData: Record<string, unknown>): Contact
 
   for (const slot of CUSTOM_FIELD_SLOTS) {
     const value = readSlotValue(slot, inputData[slot.key])
-    if (value !== undefined) {
+    // Null is rejected alongside undefined because the API does not read the two
+    // the same way: an absent key leaves the column as it is stored, while an
+    // explicit null empties it. Two ordinary mappings produce one — `null` is
+    // valid JSON, so a blank cell mapped into a JSON slot parses to it, and a
+    // value no text column can hold (a line-item array, an object) reads as
+    // nothing. Either would wipe a stored value the Zap never meant to touch.
+    if (value !== undefined && value !== null) {
       payload[slot.key] = value
     }
   }

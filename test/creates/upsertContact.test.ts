@@ -230,6 +230,44 @@ describe('create or update contact', () => {
     })
   })
 
+  // The action promises that "fields left blank are left as they are stored rather
+  // than emptied", and the API keeps that promise by key: an absent key preserves
+  // the column, an explicit null empties it. So a null on the wire is not a smaller
+  // version of sending nothing — it is the opposite of it, and it destroys data a
+  // Zap only meant to leave alone.
+  it('sends no key for a JSON slot whose value renders as null', async () => {
+    // 'null' is valid JSON, so a source cell holding it — or a formatter step that
+    // spells an empty value that way — parses to null and would erase the slot.
+    const captured = captureUpsert()
+
+    await appTester(performUpsert, {
+      authData,
+      inputData: {
+        workspace_id: 'acme',
+        email: 'bob.sample@example.com',
+        custom_json_1: 'null',
+      },
+    })
+
+    expect(Object.keys(captured.body.contact as Record<string, unknown>)).not.toContain(
+      'custom_json_1',
+    )
+    expect(captured.body.contact).toEqual({ email: 'bob.sample@example.com' })
+  })
+
+  it('sends no key for a value no text column can hold', () => {
+    // Mapping a line-item array or a whole object into a text slot is a mistake a
+    // Zap author makes in the editor, where the field accepts anything. Reading it
+    // as nothing is right; sending that nothing as null is not.
+    const payload = buildContactPayload({
+      email: 'bob.sample@example.com',
+      custom_string_1: { tier: 'gold' },
+      custom_string_2: ['gold', 'silver'],
+    })
+
+    expect(payload).toEqual({ email: 'bob.sample@example.com' })
+  })
+
   it('names the field when a value cannot be what its column needs', () => {
     // The API refuses the whole request over one malformed timestamp, so the
     // message has to say which field — otherwise the user sees a parse error from

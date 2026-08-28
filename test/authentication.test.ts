@@ -47,6 +47,17 @@ describe('authentication', () => {
     }
   })
 
+  it('sends a new user to Integrations, the only screen that mints a Zapier key', () => {
+    // This help text is the first instruction anyone reads about Notifuse, and
+    // Settings → Team mints a key with no permissions chosen — so a reader who
+    // followed it built a key that authenticates and fails at the first trigger.
+    // Connecting from Settings → Integrations is what scopes the key for them.
+    const apiKey = authentication.fields.find((field) => field.key === 'apiKey')
+
+    expect(apiKey?.helpText).toMatch(/Settings → Integrations/)
+    expect(apiKey?.helpText).not.toMatch(/Settings → Team/)
+  })
+
   it('does not ask for a workspace, which custom auth cannot compute', () => {
     // Custom auth has no computed fields, so a workspace here would have to be
     // typed by hand and would be wrong on every other operation. It belongs in a
@@ -84,6 +95,44 @@ describe('authentication', () => {
     expect(scope.isDone()).toBe(true)
   })
 
+  it('reaches a self-hosted instance from the address the console is opened at', async () => {
+    // The field asks for "the address you open the Notifuse console at" and
+    // Notifuse serves the console under /console, so that is what the address bar
+    // shows and what gets pasted. Every call would otherwise ask for
+    // /console/api/… , which the SPA fallback answers with index.html and a 200.
+    const scope = nock('https://emails.example.com').get('/api/workspaces.list').reply(200, workspaces)
+
+    await appTester(testAuth, {
+      authData: { apiKey: 'jwt-token', apiUrl: 'https://emails.example.com/console/' },
+    })
+
+    expect(scope.isDone()).toBe(true)
+  })
+
+  it('blames the address, not the key, when the answer is not a workspace list', async () => {
+    // An HTML body leaves response.data undefined — the platform swallows the
+    // parse error and nothing under 400 is touched by afterResponse — so reading
+    // "not an array" as "this key reaches no workspace" sends the user to create a
+    // second key, then a third, while the field that is wrong goes untouched.
+    nock('https://emails.example.com')
+      .get('/api/workspaces.list')
+      .reply(200, '<!doctype html><html><body>Notifuse</body></html>', {
+        'content-type': 'text/html',
+      })
+
+    const message = await appTester(testAuth, {
+      authData: { apiKey: 'jwt-token', apiUrl: 'https://emails.example.com' },
+    }).then(
+      () => '',
+      (error: Error) => error.message,
+    )
+
+    expect(message).toMatch(/https:\/\/emails\.example\.com\/api\/workspaces\.list/)
+    expect(message).toMatch(/API URL/i)
+    // Never the no-workspace instruction: the key is fine, the address is not.
+    expect(message).not.toMatch(/Settings/)
+  })
+
   it('rejects a key that reaches no workspace', async () => {
     // The key authenticates but every operation needs a workspace, so a connection
     // that resolves to none would fail at the first dropdown instead of here.
@@ -92,6 +141,21 @@ describe('authentication', () => {
     await expect(appTester(testAuth, { authData: { apiKey: 'jwt-token' } })).rejects.toThrow(
       /workspace/i,
     )
+  })
+
+  it('names Integrations when telling the user where to make the key again', async () => {
+    // The recovery is to create the key inside the workspace Zapier should use,
+    // and the screen that does that is Settings → Integrations. Naming Team here
+    // sent the user back to the screen that cannot scope a key for them.
+    nock(CLOUD_API_URL).get('/api/workspaces.list').reply(200, [])
+
+    const message = await appTester(testAuth, { authData: { apiKey: 'jwt-token' } }).then(
+      () => '',
+      (error: Error) => error.message,
+    )
+
+    expect(message).toMatch(/Settings → Integrations/)
+    expect(message).not.toMatch(/Settings → Team/)
   })
 
   it('reports a revoked key as an expired connection', async () => {
