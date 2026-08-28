@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+*.zip
+.zapierapprc
+.env
+.env.*
+!.env.example
+coverage/
+.DS_Store
+*.log

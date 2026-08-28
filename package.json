@@ -1,0 +1,33 @@
+{
+  "name": "notifuse-zapier",
+  "version": "1.0.0",
+  "description": "Zapier integration for Notifuse — REST Hook triggers and RPC actions over the Notifuse API",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
+  "engines": {
+    "node": ">=18.20",
+    "npm": ">=5.6.0"
+  },
+  "scripts": {
+    "build": "tsc && node ./scripts/copy-assets.mjs",
+    "_zapier-build": "npm run build",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "validate": "npm run build && zapier-platform validate"
+  },
+  "dependencies": {
+    "zapier-platform-core": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "nock": "^14.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0",
+    "zapier-platform-cli": "19.1.0"
+  }
+}
