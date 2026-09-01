@@ -1,6 +1,6 @@
 {
   "name": "notifuse-zapier",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Zapier integration for Notifuse — REST Hook triggers and RPC actions over the Notifuse API",
   "license": "MIT",
   "private": true,
