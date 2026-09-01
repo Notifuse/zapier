@@ -7,10 +7,12 @@ import { type Bundle, type ZObject, createAppTester } from 'zapier-platform-core
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { CLOUD_API_URL } from '../src/constants.js'
+import sendTransactionalEmail from '../src/creates/sendTransactionalEmail.js'
 import subscribeToList from '../src/creates/subscribeToList.js'
 import upsertContact from '../src/creates/upsertContact.js'
 import { listDropdown } from '../src/dropdowns/list.js'
 import { segmentDropdown } from '../src/dropdowns/segment.js'
+import { notificationDropdown } from '../src/dropdowns/transactionalNotification.js'
 import { workspaceDropdown } from '../src/dropdowns/workspace.js'
 import App from '../src/index.js'
 import { type NotifuseEventType, sampleEnvelope } from '../src/samples/index.js'
@@ -65,9 +67,9 @@ const performOf = (operation: unknown): Perform =>
   (operation as { perform?: unknown }).perform as Perform
 
 /** The pickers, which Zapier can only express as hidden triggers. */
-const DROPDOWNS = [workspaceDropdown, listDropdown, segmentDropdown]
+const DROPDOWNS = [workspaceDropdown, listDropdown, segmentDropdown, notificationDropdown]
 
-const CREATES = [upsertContact, subscribeToList]
+const CREATES = [sendTransactionalEmail, upsertContact, subscribeToList]
 
 /**
  * One visible trigger and a delivery of the kind it subscribes to.
@@ -297,6 +299,28 @@ describe('REST hook contract', () => {
 })
 
 describe('actions', () => {
+  it('answers the send with one object, not an array, and stays inside its sample', async () => {
+    // A create returns the single record it wrote, and the platform rejects an
+    // array here — the opposite of the rule every trigger lives by.
+    nock(CLOUD_API_URL)
+      .post('/api/transactional.send')
+      .reply(200, { message_id: 'msg_01HZY8QK2N4P6R8T0V2X4Z6B8D', success: true })
+
+    const sent = await appTester(performOf(sendTransactionalEmail.operation), {
+      authData,
+      inputData: {
+        workspace_id: 'acme',
+        notification_id: 'order_confirmation',
+        email: 'bob.sample@example.com',
+        message_external_id: 'order-9912',
+      },
+    })
+
+    expect(Array.isArray(sent)).toBe(false)
+    expect(isRecord(sent)).toBe(true)
+    expect(missingFromLive(sendTransactionalEmail.operation.sample, sent)).toEqual([])
+  })
+
   it('answers the upsert with one object, not an array, and stays inside its sample', async () => {
     // A create returns the single record it wrote, and the platform rejects an
     // array here — the opposite of the rule every trigger lives by.
@@ -367,6 +391,9 @@ describe('dropdowns', () => {
     { picker: workspaceDropdown, path: '/api/workspaces.list', body: [] },
     { picker: listDropdown, path: '/api/lists.list', body: { lists: [] } },
     { picker: segmentDropdown, path: '/api/segments.list', body: { segments: [] } },
+    // `null`, not `[]`: transactional.list marshals an uninitialised slice, so a
+    // workspace with no notifications answers with a null the picker must survive.
+    { picker: notificationDropdown, path: '/api/transactional.list', body: { notifications: null, total: 0 } },
   ]
 
   it.each(listings)('answers $path with an array', async ({ picker, path, body }) => {

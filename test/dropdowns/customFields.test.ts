@@ -156,10 +156,17 @@ describe('custom field input fields', () => {
 })
 
 describe('the app the custom fields belong to', () => {
-  it('offers both actions and no search', () => {
+  it('offers three actions and no search', () => {
     // Every visible operation owes public review a live Zap and a successful run,
-    // so a third one is a decision rather than an addition.
-    expect(Object.keys(App.creates).sort()).toEqual(['subscribe_to_list', 'upsert_contact'])
+    // so a third one is a decision rather than an addition. It was taken for
+    // Send Transactional Email: sending is what the integration exists for, and
+    // Zapier has blocked migrating users across majors since February 2026, so an
+    // action missing from the first published major can never be added to it.
+    expect(Object.keys(App.creates).sort()).toEqual([
+      'send_transactional_email',
+      'subscribe_to_list',
+      'upsert_contact',
+    ])
     expect(App).not.toHaveProperty('searches')
   })
 })

@@ -3,10 +3,12 @@ import { createRequire } from 'node:module'
 import { defineApp, version as platformVersion } from 'zapier-platform-core'
 
 import authentication from './authentication.js'
+import sendTransactionalEmail from './creates/sendTransactionalEmail.js'
 import subscribeToList from './creates/subscribeToList.js'
 import upsertContact from './creates/upsertContact.js'
 import { listDropdown } from './dropdowns/list.js'
 import { segmentDropdown } from './dropdowns/segment.js'
+import { notificationDropdown } from './dropdowns/transactionalNotification.js'
 import { workspaceDropdown } from './dropdowns/workspace.js'
 import { afterResponse, beforeRequest } from './middleware.js'
 import contactUnsubscribed from './triggers/contactUnsubscribed.js'
@@ -50,6 +52,7 @@ export default defineApp({
     [workspaceDropdown.key]: workspaceDropdown,
     [listDropdown.key]: listDropdown,
     [segmentDropdown.key]: segmentDropdown,
+    [notificationDropdown.key]: notificationDropdown,
 
     [newContact.key]: newContact,
     [updatedContact.key]: updatedContact,
@@ -63,8 +66,13 @@ export default defineApp({
   // Zap and one successful run in the integration admins' account before public
   // review passes, and Zapier has blocked migrating users across integration
   // majors since February 2026 — so the first published major cannot be escaped
-  // later by adding a third action.
+  // later by adding an action to it.
+  //
+  // That is the argument for sending being here rather than in a v2: it is what
+  // the integration is for, and an integration published without it could never
+  // gain it. It leads the list for the same reason.
   creates: {
+    [sendTransactionalEmail.key]: sendTransactionalEmail,
     [upsertContact.key]: upsertContact,
     [subscribeToList.key]: subscribeToList,
   },

@@ -1,6 +1,6 @@
 # notifuse-zapier
 
-The Zapier integration for [Notifuse](https://www.notifuse.com). Triggers are REST Hooks layered on Notifuse's outbound webhook subsystem; actions call its RPC API. Written in TypeScript against `zapier-platform-core` 19.
+The Zapier integration for [Notifuse](https://www.notifuse.com). Its purpose is sending: a Zap picks one of the workspace's transactional notifications and Notifuse sends it, with the template's variables filled from whatever triggered the Zap. Around that, triggers are REST Hooks layered on Notifuse's outbound webhook subsystem, and the contact actions call its RPC API. Written in TypeScript against `zapier-platform-core` 19.
 
 The rules that keep this app reviewable — and the failure modes that are silent rather than loud — are in [CLAUDE.md](./CLAUDE.md). Read it before changing anything structural. The backend lives in a separate repository ([Notifuse/notifuse](https://github.com/Notifuse/notifuse)), and so does the user-facing documentation (published at [docs.notifuse.com/integrations/zapier](https://docs.notifuse.com/integrations/zapier)).
 
@@ -17,10 +17,13 @@ The rules that keep this app reviewable — and the failure modes that are silen
 
 | Actions | Endpoint |
 | --- | --- |
+| Send Transactional Email | `POST /api/transactional.send` |
 | Create or Update Contact | `POST /api/contacts.upsert` |
 | Subscribe Contact to List | `POST /api/lists.subscribe` |
 
-Three dynamic dropdowns — workspace, list, segment — fill the input fields. Zapier has no separate concept for a picker, so each is registered as a hidden polling trigger.
+Four dynamic dropdowns — workspace, notification, list, segment — fill the input fields. Zapier has no separate concept for a picker, so each is registered as a hidden polling trigger.
+
+**Send Transactional Email is the headline operation**, which is why it is first in that table and first in `creates`. It always asks for the `email` channel: the endpoint refuses an empty `channels` array even though the service behind it would default to every channel the notification configures, and `email` is the only channel Notifuse defines. It also carries `message_external_id`, the API's `external_id` for the message, renamed because the contact block already spells that key for the contact's own identifier — two fields sharing a key fail `validate` outright.
 
 ## Commands
 
@@ -119,14 +122,15 @@ Three tests are required for a trigger, all described in CLAUDE.md: shape parity
 
 `npx zapier-platform validate` is clean of errors and of publishing tasks. The general warnings it still reports are answers rather than omissions:
 
-- **D004 on `external_id`, twice** — "looks like an ID field but lacks a dynamic dropdown". It is the customer's identifier for the contact in *their* system, a CRM or billing id, so there is nothing on the Notifuse side to enumerate. The field key has to stay `external_id` because that is what the API stores it as, and renaming it would break the parity between what a user types into an action and what they map out of a trigger.
+- **D004 on `external_id`, three times** — "looks like an ID field but lacks a dynamic dropdown". It is the customer's identifier for the contact in *their* system, a CRM or billing id, so there is nothing on the Notifuse side to enumerate. The field key has to stay `external_id` because that is what the API stores it as, and renaming it would break the parity between what a user types into an action and what they map out of a trigger. Once per action carrying the shared contact block, so a third action adds a third occurrence rather than a new question.
+- **D004 on `message_external_id`** — the same answer, for the message rather than the person: it is the caller's own identifier for one send, used as an idempotency key, and Notifuse has no list of them to offer. It is spelled differently from the contact's `external_id` because the two sit in the same form and `zapier-platform-schema` rejects two input fields sharing a key, whatever their `required` value.
 - **D026 on `apiUrl`** — "consider manual validation if allowing users to enter domain or subdomain". Notifuse is self-hostable, so the field exists on purpose; `beforeRequest` normalises what is typed and refuses plain HTTP outright, and Zapier's own guidance names a self-hosted domain as a legitimate connection label.
 
 General warnings do not block pushing or publishing; they are read by a human reviewer. Do not silence them by weakening the design.
 
 ## Backend prerequisites
 
-This app requires **Notifuse 39.0 or newer**. Specifically it depends on `webhookSubscriptions.create` accepting `source` and the `list_ids` / `segment_ids` filters, on `segments.contacts?expand=contact`, on `contacts.upsert` returning the stored contact and `lists.subscribe` returning one entry per list, and on permission denials answering 403. An older instance answers some of those with a 400 that names nothing useful.
+This app requires **Notifuse 39.1 or newer**. 39.1 is the floor because of the send action alone: it is the release that grants a Zapier connection's API key `transactional` read and write, and on 39.0 the notification picker answers 403 and the step cannot be saved. Specifically it depends on `transactional.send` and `transactional.list`, on `webhookSubscriptions.create` accepting `source` and the `list_ids` / `segment_ids` filters, on `segments.contacts?expand=contact`, on `contacts.upsert` returning the stored contact and `lists.subscribe` returning one entry per list, and on permission denials answering 403. An older instance answers some of those with a 400 that names nothing useful.
 
 ## Release
 
